@@ -8,12 +8,10 @@ from a2a.types import (
     AgentCard,
     AgentSkill,
 )
-from agent_executor import (
-    HelloWorldAgentExecutor,  # type: ignore[import-untyped]
-)
+from a2a_helloworld.agent_executor import HelloWorldAgentExecutor
 
 
-if __name__ == '__main__':
+def main():
     # --8<-- [start:AgentSkill]
     skill = AgentSkill(
         id='hello_world',
@@ -79,5 +77,8 @@ if __name__ == '__main__':
     for route in app.routes:
         print(f"  {getattr(route, 'methods', 'N/A')} {getattr(route, 'path', 'N/A')}")
 
-
     uvicorn.run(app, host='0.0.0.0', port=9999, log_level="debug")
+
+
+if __name__ == '__main__':
+    main()

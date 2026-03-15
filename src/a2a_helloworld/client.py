@@ -71,7 +71,11 @@ async def main() -> None:
                 print(task.model_dump(mode='json', exclude_none=True))
 
 
-if __name__ == '__main__':
+def cli():
     import asyncio
 
     asyncio.run(main())
+
+
+if __name__ == '__main__':
+    cli()
