@@ -34,7 +34,7 @@ from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,
     EXTENDED_AGENT_CARD_PATH,
 )
-from a2a_helloworld.protocol import TRANSPORT_HTTP_JSON, TRANSPORT_JSONRPC
+from a2a_helloworld.protocol import HTTP_TRANSPORTS, TRANSPORT_HTTP_JSON, TRANSPORT_JSONRPC
 
 
 async def main() -> None:
@@ -60,6 +60,12 @@ async def main() -> None:
         "--message",
         default=os.environ.get('A2A_MESSAGE', 'What is your quest?'),
         help="Text message to send to the agent (env: A2A_MESSAGE, default: %(default)s)",
+    )
+    parser.add_argument(
+        "--transport",
+        choices=[t.value for t in HTTP_TRANSPORTS],
+        default=os.environ.get('A2A_TRANSPORT'),
+        help="Transport to use when talking to the agent; overrides the agent card's preferred_transport (env: A2A_TRANSPORT, default: agent card preferred_transport)",
     )
     parser.add_argument(
         "--log-level",
@@ -92,12 +98,12 @@ async def main() -> None:
         agent_card: AgentCard | None = None
 
         try:
-            logger.info(
+            logger.debug(
                 f'Attempting to fetch public agent card from: {base_url}{AGENT_CARD_WELL_KNOWN_PATH}')
             agent_card = await resolver.get_agent_card()
-            logger.info('Successfully fetched public agent card:')
-            logger.debug(agent_card.model_dump_json(indent=2, exclude_none=True))
-            logger.info(
+            logger.debug('Successfully fetched public agent card:')
+            logger.info(agent_card.model_dump_json(indent=2, exclude_none=True))
+            logger.debug(
                 '\nUsing PUBLIC agent card for client initialization (default).')
 
         except Exception as e:
@@ -112,16 +118,16 @@ async def main() -> None:
             print(agent_card.model_dump_json(indent=2, exclude_none=True))
             return
 
-        # -- Step 2: Select transport from agent card --------------------------
+        # -- Step 2: Select transport ------------------------------------------
         transport_map = {
             TRANSPORT_HTTP_JSON.value: TRANSPORT_HTTP_JSON,
             TRANSPORT_JSONRPC.value: TRANSPORT_JSONRPC,
         }
-        preferred = agent_card.preferred_transport
-        transport_protocol = transport_map.get(preferred)
+        selected = args.transport or agent_card.preferred_transport
+        transport_protocol = transport_map.get(selected)
         if transport_protocol is None:
             raise RuntimeError(
-                f"Unsupported preferred_transport '{preferred}' in agent card. "
+                f"Unsupported transport '{selected}'. "
                 f"Supported: {', '.join(transport_map)}"
             )
 
@@ -131,13 +137,13 @@ async def main() -> None:
         )
         factory = ClientFactory(config)
         client = factory.create(agent_card)
-        logger.info(f'{preferred} client initialized.')
+        logger.debug(f'{selected} client initialized.')
 
         # -- Step 3: Send a message and print the response --------------------
         message = create_text_message_object(
             content=args.message)
 
-        logger.info('Sending message...')
+        logger.debug('Sending message...')
         async for event in client.send_message(message):
             if isinstance(event, Message):
                 # The agent responded with a direct Message (no task wrapper).
