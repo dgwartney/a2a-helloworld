@@ -10,14 +10,17 @@ Environment variables::
 
     A2A_AGENT_URL          Agent card URL (default: http://localhost:9999)
     A2A_PROTOCOL_VERSION   Protocol version in X.Y format (default: 1.0)
+    A2A_PREFERRED_TRANSPORT  Preferred transport binding (default: HTTP+JSON)
 
 Usage::
 
     uv run a2a-agent                                          # local default
     uv run a2a-agent --a2a-protocol-version 0.3               # specific version
     uv run a2a-agent --a2a-agent-url https://my.host          # custom URL
+    uv run a2a-agent --a2a-preferred-transport gRPC             # custom transport
     A2A_AGENT_URL=https://my.host uv run a2a-agent            # URL via env var
     A2A_PROTOCOL_VERSION=0.3 uv run a2a-agent                 # version via env var
+    A2A_PREFERRED_TRANSPORT=gRPC uv run a2a-agent              # transport via env var
 """
 
 import argparse
@@ -40,6 +43,7 @@ from a2a.types import (
 from a2a_helloworld.agent_executor import HelloWorldAgentExecutor
 
 KNOWN_A2A_PROTOCOL_VERSIONS = {'0.1', '0.2', '0.3', '1.0'}
+SUPPORTED_TRANSPORTS = ['HTTP+JSON', 'gRPC', 'JSON-RPC']
 
 
 def _validate_protocol_version(value: str) -> str:
@@ -88,6 +92,12 @@ def main() -> None:
         default=os.environ.get('A2A_PROTOCOL_VERSION', '1.0'),
         help="A2A protocol version advertised in the agent card in X.Y format (env: A2A_PROTOCOL_VERSION, default: %(default)s)",
     )
+    parser.add_argument(
+        "--a2a-preferred-transport",
+        choices=SUPPORTED_TRANSPORTS,
+        default=os.environ.get('A2A_PREFERRED_TRANSPORT', 'HTTP+JSON'),
+        help="Preferred transport binding advertised in the agent card (env: A2A_PREFERRED_TRANSPORT, default: %(default)s)",
+    )
     args = parser.parse_args()
 
     # -- Skills ---------------------------------------------------------------
@@ -112,7 +122,7 @@ def main() -> None:
         default_output_modes=['text'],
         capabilities=AgentCapabilities(streaming=False, pushNotifications=False, stateTransitionHistory=False, extendedAgentCard=False),
         skills=[skill],
-        preferred_transport='HTTP+JSON',
+        preferred_transport=args.a2a_preferred_transport,
         protocolVersion=args.a2a_protocol_version,
     )
 
