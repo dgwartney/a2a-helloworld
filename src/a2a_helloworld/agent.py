@@ -8,10 +8,13 @@ The agent card URL is read from the ``A2A_AGENT_URL`` environment variable
 
 Usage::
 
-    uv run a2a-agent                          # local default
-    A2A_AGENT_URL=https://my.host uv run a2a-agent  # custom URL
+    uv run a2a-agent                                          # local default
+    uv run a2a-agent --a2a-protocol-version 0.3               # specific version
+    A2A_AGENT_URL=https://my.host uv run a2a-agent            # custom URL
 """
 
+import argparse
+import logging
 import os
 
 from dotenv import load_dotenv
@@ -29,6 +32,28 @@ from a2a.types import (
 )
 from a2a_helloworld.agent_executor import HelloWorldAgentExecutor
 
+KNOWN_A2A_PROTOCOL_VERSIONS = {'0.1', '0.2', '0.3', '1.0'}
+
+
+def _validate_protocol_version(value: str) -> str:
+    """Validate that the protocol version is in X.Y format (not X.Y.Z).
+
+    Raises argparse.ArgumentTypeError if the format is invalid.
+    Logs a warning if the version is valid but not a known release.
+    """
+    parts = value.split('.')
+    if len(parts) != 2 or not all(p.isdigit() for p in parts):
+        raise argparse.ArgumentTypeError(
+            f"invalid version '{value}': must be in X.Y format (e.g. 1.0, 0.3)"
+        )
+    if value not in KNOWN_A2A_PROTOCOL_VERSIONS:
+        logging.warning(
+            f"A2A protocol version '{value}' is not a known release "
+            f"(known: {', '.join(sorted(KNOWN_A2A_PROTOCOL_VERSIONS))}). "
+            f"Proceeding anyway."
+        )
+    return value
+
 
 def main() -> None:
     """Configure and start the A2A agent server.
@@ -42,6 +67,17 @@ def main() -> None:
         4. Print registered routes for debugging, then start uvicorn on
            ``0.0.0.0:9999``.
     """
+    parser = argparse.ArgumentParser(
+        description="A2A Hello World agent server",
+    )
+    parser.add_argument(
+        "--a2a-protocol-version",
+        type=_validate_protocol_version,
+        default="1.0",
+        help="A2A protocol version advertised in the agent card in X.Y format (default: %(default)s)",
+    )
+    args = parser.parse_args()
+
     # -- Skills ---------------------------------------------------------------
     skill = AgentSkill(
         id='hello_world',
@@ -65,7 +101,7 @@ def main() -> None:
         capabilities=AgentCapabilities(streaming=False, pushNotifications=False, stateTransitionHistory=False, extendedAgentCard=False),
         skills=[skill],
         preferred_transport='HTTP+JSON',
-        protocolVersion = "1.0"
+        protocolVersion=args.a2a_protocol_version,
     )
 
     # -- Request handler & server ---------------------------------------------
@@ -81,12 +117,32 @@ def main() -> None:
 
     app = server.build()
 
+    # -- Startup configuration summary ----------------------------------------
+    host = '0.0.0.0'
+    port = 9999
+    print("=" * 60)
+    print("A2A Hello World Agent")
+    print("=" * 60)
+    print(f"  Name:              {public_agent_card.name}")
+    print(f"  Version:           {public_agent_card.version}")
+    print(f"  Protocol version:  {public_agent_card.protocol_version}")
+    print(f"  URL:               {public_agent_card.url}")
+    print(f"  Transport:         {public_agent_card.preferred_transport}")
+    print(f"  Host:              {host}")
+    print(f"  Port:              {port}")
+    print(f"  Input modes:       {', '.join(public_agent_card.default_input_modes)}")
+    print(f"  Output modes:      {', '.join(public_agent_card.default_output_modes)}")
+    print(f"  Streaming:         {public_agent_card.capabilities.streaming}")
+    print(f"  Push notifications:{' '}{public_agent_card.capabilities.push_notifications}")
+    print(f"  Skills:            {', '.join(s.name for s in public_agent_card.skills)}")
+    print("=" * 60)
+
     # Log all registered routes so operators can verify the endpoint layout.
     for route in app.routes:
         print(
             f"  {getattr(route, 'methods', 'N/A')} {getattr(route, 'path', 'N/A')}")
 
-    uvicorn.run(app, host='0.0.0.0', port=9999, log_level="debug")
+    uvicorn.run(app, host=host, port=port, log_level="debug")
 
 
 if __name__ == '__main__':
