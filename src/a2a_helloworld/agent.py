@@ -118,7 +118,16 @@ def main() -> None:
         default=os.environ.get('A2A_REST_PREFIX', ''),
         help="Path prefix for HTTP+JSON REST routes, e.g. /api (env: A2A_REST_PREFIX, default: none)",
     )
+    parser.add_argument(
+        "--log-level",
+        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+        default=os.environ.get('A2A_LOG_LEVEL', 'INFO'),
+        help="Python logging level (env: A2A_LOG_LEVEL, default: %(default)s)",
+    )
     args = parser.parse_args()
+
+    logging.basicConfig(level=getattr(logging, args.log_level))
+    logger = logging.getLogger(__name__)
 
     # -- Skills ---------------------------------------------------------------
     skill = AgentSkill(
@@ -194,30 +203,29 @@ def main() -> None:
     # -- Startup configuration summary ----------------------------------------
     host = '0.0.0.0'
     port = 9999
-    print("=" * 60)
-    print("A2A Hello World Agent")
-    print("=" * 60)
-    print(f"  Name:              {public_agent_card.name}")
-    print(f"  Version:           {public_agent_card.version}")
-    print(f"  Protocol version:  {public_agent_card.protocol_version}")
-    print(f"  URL:               {public_agent_card.url}")
-    print(f"  Transport:         {public_agent_card.preferred_transport} (preferred)")
-    print(f"  Also serving:      {other_transport}")
-    print(f"  Host:              {host}")
-    print(f"  Port:              {port}")
-    print(f"  Input modes:       {', '.join(public_agent_card.default_input_modes)}")
-    print(f"  Output modes:      {', '.join(public_agent_card.default_output_modes)}")
-    print(f"  Streaming:         {public_agent_card.capabilities.streaming}")
-    print(f"  Push notifications:{' '}{public_agent_card.capabilities.push_notifications}")
-    print(f"  Skills:            {', '.join(s.name for s in public_agent_card.skills)}")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("A2A Hello World Agent")
+    logger.info("=" * 60)
+    logger.info(f"  Name:              {public_agent_card.name}")
+    logger.info(f"  Version:           {public_agent_card.version}")
+    logger.info(f"  Protocol version:  {public_agent_card.protocol_version}")
+    logger.info(f"  URL:               {public_agent_card.url}")
+    logger.info(f"  Transport:         {public_agent_card.preferred_transport} (preferred)")
+    logger.info(f"  Also serving:      {other_transport}")
+    logger.info(f"  Host:              {host}")
+    logger.info(f"  Port:              {port}")
+    logger.info(f"  Input modes:       {', '.join(public_agent_card.default_input_modes)}")
+    logger.info(f"  Output modes:      {', '.join(public_agent_card.default_output_modes)}")
+    logger.info(f"  Streaming:         {public_agent_card.capabilities.streaming}")
+    logger.info(f"  Push notifications:{' '}{public_agent_card.capabilities.push_notifications}")
+    logger.info(f"  Skills:            {', '.join(s.name for s in public_agent_card.skills)}")
+    logger.info("=" * 60)
 
     # Log all registered routes so operators can verify the endpoint layout.
     for route in app.routes:
-        print(
-            f"  {getattr(route, 'methods', 'N/A')} {getattr(route, 'path', 'N/A')}")
+        logger.info(f"  {getattr(route, 'methods', 'N/A')} {getattr(route, 'path', 'N/A')}")
 
-    uvicorn.run(app, host=host, port=port, log_level="debug")
+    uvicorn.run(app, host=host, port=port, log_level=args.log_level.lower())
 
 
 if __name__ == '__main__':

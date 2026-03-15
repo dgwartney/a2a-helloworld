@@ -59,9 +59,15 @@ async def main() -> None:
         default=os.environ.get('A2A_MESSAGE', 'What is your quest?'),
         help="Text message to send to the agent (env: A2A_MESSAGE, default: %(default)s)",
     )
+    parser.add_argument(
+        "--log-level",
+        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+        default=os.environ.get('A2A_LOG_LEVEL', 'INFO'),
+        help="Python logging level (env: A2A_LOG_LEVEL, default: %(default)s)",
+    )
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=getattr(logging, args.log_level))
     logger = logging.getLogger(__name__)
 
     base_url = os.environ.get('A2A_AGENT_URL', 'http://localhost:9999')
@@ -125,11 +131,11 @@ async def main() -> None:
         async for event in client.send_message(message):
             if isinstance(event, Message):
                 # The agent responded with a direct Message (no task wrapper).
-                print(event.model_dump(mode='json', exclude_none=True))
+                logger.info(event.model_dump(mode='json', exclude_none=True))
             else:
                 # The response is a (Task, UpdateEvent | None) tuple.
                 task, update = event
-                print(task.model_dump(mode='json', exclude_none=True))
+                logger.info(task.model_dump(mode='json', exclude_none=True))
 
 
 def cli() -> None:
