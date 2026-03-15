@@ -113,6 +113,11 @@ def main() -> None:
         default=os.environ.get('A2A_PREFERRED_TRANSPORT', TRANSPORT_HTTP_JSON.value),
         help="Preferred transport binding advertised in the agent card (env: A2A_PREFERRED_TRANSPORT, default: %(default)s)",
     )
+    parser.add_argument(
+        "--rest-prefix",
+        default=os.environ.get('A2A_REST_PREFIX', ''),
+        help="Path prefix for HTTP+JSON REST routes, e.g. /api (env: A2A_REST_PREFIX, default: none)",
+    )
     args = parser.parse_args()
 
     # -- Skills ---------------------------------------------------------------
@@ -136,6 +141,15 @@ def main() -> None:
         else TRANSPORT_HTTP_JSON.value
     )
 
+    rest_url = f'{args.agent_url}{args.rest_prefix}'
+    jsonrpc_url = args.agent_url
+
+    # Build interface list with preferred transport first.
+    interface_urls = {
+        TRANSPORT_HTTP_JSON.value: rest_url,
+        TRANSPORT_JSONRPC.value: jsonrpc_url,
+    }
+
     public_agent_card = AgentCard(
         name=AGENT_NAME,
         description=AGENT_DESCRIPTION,
@@ -148,8 +162,8 @@ def main() -> None:
         preferred_transport=args.preferred_transport,
         protocolVersion=args.protocol_version,
         additional_interfaces=[
-            AgentInterface(transport=args.preferred_transport, url=args.agent_url),
-            AgentInterface(transport=other_transport, url=args.agent_url),
+            AgentInterface(transport=args.preferred_transport, url=interface_urls[args.preferred_transport]),
+            AgentInterface(transport=other_transport, url=interface_urls[other_transport]),
         ],
     )
 
@@ -174,7 +188,7 @@ def main() -> None:
     )
 
     app = jsonrpc_server.build()
-    rest_app = rest_server.build(agent_card_url='/--skip--/agent-card.json')
+    rest_app = rest_server.build(agent_card_url='/--skip--/agent-card.json', rpc_url=args.rest_prefix)
     app.routes.append(Mount('', app=rest_app))
 
     # -- Startup configuration summary ----------------------------------------

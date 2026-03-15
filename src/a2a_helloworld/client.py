@@ -12,6 +12,7 @@ Usage::
     A2A_AGENT_URL=https://my.host uv run client  # custom URL
 """
 
+import argparse
 import logging
 import os
 
@@ -47,6 +48,14 @@ async def main() -> None:
     3. **Send a message** — sends a simple text message and iterates over the
        response events, printing each one as JSON.
     """
+    parser = argparse.ArgumentParser(description="A2A Hello World client")
+    parser.add_argument(
+        "--agent-card-only",
+        action="store_true",
+        help="Fetch and print the agent card, then exit",
+    )
+    args = parser.parse_args()
+
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
 
@@ -77,6 +86,10 @@ async def main() -> None:
             raise RuntimeError(
                 'Failed to fetch the public agent card. Cannot continue.'
             ) from e
+
+        if args.agent_card_only:
+            print(agent_card.model_dump_json(indent=2, exclude_none=True))
+            return
 
         # -- Step 2: Select transport from agent card --------------------------
         transport_map = {
