@@ -3,14 +3,21 @@
 Builds a FastAPI application that serves the Hello World agent over the
 HTTP+JSON transport binding and runs it with uvicorn.
 
-The agent card URL is read from the ``A2A_AGENT_URL`` environment variable
-(defaults to ``http://localhost:9999``).
+Configuration is resolved with CLI arguments taking precedence over
+environment variables, which take precedence over built-in defaults.
+
+Environment variables::
+
+    A2A_AGENT_URL          Agent card URL (default: http://localhost:9999)
+    A2A_PROTOCOL_VERSION   Protocol version in X.Y format (default: 1.0)
 
 Usage::
 
     uv run a2a-agent                                          # local default
     uv run a2a-agent --a2a-protocol-version 0.3               # specific version
-    A2A_AGENT_URL=https://my.host uv run a2a-agent            # custom URL
+    uv run a2a-agent --a2a-agent-url https://my.host          # custom URL
+    A2A_AGENT_URL=https://my.host uv run a2a-agent            # URL via env var
+    A2A_PROTOCOL_VERSION=0.3 uv run a2a-agent                 # version via env var
 """
 
 import argparse
@@ -71,10 +78,15 @@ def main() -> None:
         description="A2A Hello World agent server",
     )
     parser.add_argument(
+        "--a2a-agent-url",
+        default=os.environ.get('A2A_AGENT_URL', 'http://localhost:9999'),
+        help="URL advertised in the agent card (env: A2A_AGENT_URL, default: %(default)s)",
+    )
+    parser.add_argument(
         "--a2a-protocol-version",
         type=_validate_protocol_version,
-        default="1.0",
-        help="A2A protocol version advertised in the agent card in X.Y format (default: %(default)s)",
+        default=os.environ.get('A2A_PROTOCOL_VERSION', '1.0'),
+        help="A2A protocol version advertised in the agent card in X.Y format (env: A2A_PROTOCOL_VERSION, default: %(default)s)",
     )
     args = parser.parse_args()
 
@@ -94,7 +106,7 @@ def main() -> None:
     public_agent_card = AgentCard(
         name='Hello World Agent',
         description='Just a hello world agent',
-        url=os.environ.get('A2A_AGENT_URL', 'http://localhost:9999'),
+        url=args.a2a_agent_url,
         version='1.0.0',
         default_input_modes=['text'],
         default_output_modes=['text'],
