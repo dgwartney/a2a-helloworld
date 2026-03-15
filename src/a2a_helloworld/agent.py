@@ -45,6 +45,8 @@ from a2a.types import (
 )
 from starlette.routing import Mount
 
+from a2a_helloworld.log import DEFAULT_LOG_FORMAT
+
 AGENT_NAME = 'Hello World Agent'
 AGENT_DESCRIPTION = 'Just a hello world agent'
 AGENT_VERSION = '1.0.0'
@@ -124,9 +126,17 @@ def main() -> None:
         default=os.environ.get('A2A_LOG_LEVEL', 'INFO'),
         help="Python logging level (env: A2A_LOG_LEVEL, default: %(default)s)",
     )
+    parser.add_argument(
+        "--log-format",
+        default=os.environ.get('A2A_LOG_FORMAT', DEFAULT_LOG_FORMAT),
+        help="Python logging format string (env: A2A_LOG_FORMAT, default: %(default)s)",
+    )
     args = parser.parse_args()
 
-    logging.basicConfig(level=getattr(logging, args.log_level))
+    logging.basicConfig(
+        level=getattr(logging, args.log_level),
+        format=args.log_format,
+    )
     logger = logging.getLogger(__name__)
 
     # -- Skills ---------------------------------------------------------------

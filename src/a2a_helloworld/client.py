@@ -21,6 +21,8 @@ import httpx
 
 load_dotenv()
 
+from a2a_helloworld.log import DEFAULT_LOG_FORMAT
+
 from a2a.client import A2ACardResolver, ClientConfig, ClientFactory
 from a2a.client.helpers import create_text_message_object
 from a2a.types import (
@@ -65,9 +67,17 @@ async def main() -> None:
         default=os.environ.get('A2A_LOG_LEVEL', 'INFO'),
         help="Python logging level (env: A2A_LOG_LEVEL, default: %(default)s)",
     )
+    parser.add_argument(
+        "--log-format",
+        default=os.environ.get('A2A_LOG_FORMAT', DEFAULT_LOG_FORMAT),
+        help="Python logging format string (env: A2A_LOG_FORMAT, default: %(default)s)",
+    )
     args = parser.parse_args()
 
-    logging.basicConfig(level=getattr(logging, args.log_level))
+    logging.basicConfig(
+        level=getattr(logging, args.log_level),
+        format=args.log_format,
+    )
     logger = logging.getLogger(__name__)
 
     base_url = os.environ.get('A2A_AGENT_URL', 'http://localhost:9999')
