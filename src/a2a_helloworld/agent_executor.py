@@ -11,8 +11,8 @@ import asyncio
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
-from a2a.types import TaskState, TaskStatus, TaskStatusUpdateEvent
-from a2a.utils import new_agent_text_message
+from a2a.types import TaskArtifactUpdateEvent, TaskState, TaskStatus, TaskStatusUpdateEvent
+from a2a.utils import new_agent_text_message, new_text_artifact
 
 
 class HelloWorldAgent:
@@ -65,7 +65,12 @@ class HelloWorldAgentExecutor(AgentExecutor):
             context: Metadata about the current request (task id, message, etc.).
             event_queue: Queue used to emit response events back to the caller.
         """
+        result = await self.agent.invoke()
+
         if self.streaming:
+            # Streaming: emit task-level events (status updates + artifact).
+            # The SDK client rejects Message events after the first streamed
+            # response, so we must use TaskStatusUpdateEvent/TaskArtifactUpdateEvent.
             await event_queue.enqueue_event(
                 TaskStatusUpdateEvent(
                     taskId=context.task_id,
@@ -76,8 +81,24 @@ class HelloWorldAgentExecutor(AgentExecutor):
             )
             await asyncio.sleep(1)  # make streaming visually obvious
 
-        result = await self.agent.invoke()
-        await event_queue.enqueue_event(new_agent_text_message(result))
+            artifact = new_text_artifact(name='greeting', text=result)
+            await event_queue.enqueue_event(
+                TaskArtifactUpdateEvent(
+                    taskId=context.task_id,
+                    contextId=context.context_id,
+                    artifact=artifact,
+                )
+            )
+            await event_queue.enqueue_event(
+                TaskStatusUpdateEvent(
+                    taskId=context.task_id,
+                    contextId=context.context_id,
+                    status=TaskStatus(state=TaskState.completed),
+                    final=True,
+                )
+            )
+        else:
+            await event_queue.enqueue_event(new_agent_text_message(result))
 
     async def cancel(
         self, context: RequestContext, event_queue: EventQueue
