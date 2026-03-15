@@ -131,6 +131,12 @@ def main() -> None:
         default=os.environ.get('A2A_LOG_FORMAT', DEFAULT_LOG_FORMAT),
         help="Python logging format string (env: A2A_LOG_FORMAT, default: %(default)s)",
     )
+    parser.add_argument(
+        "--streaming",
+        action=argparse.BooleanOptionalAction,
+        default=os.environ.get('A2A_STREAMING', 'false').lower() == 'true',
+        help="Enable streaming capability (env: A2A_STREAMING, default: disabled)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -176,7 +182,7 @@ def main() -> None:
         version=AGENT_VERSION,
         default_input_modes=AGENT_INPUT_MODES,
         default_output_modes=AGENT_OUTPUT_MODES,
-        capabilities=AgentCapabilities(streaming=False, pushNotifications=False, stateTransitionHistory=False, extendedAgentCard=False),
+        capabilities=AgentCapabilities(streaming=args.streaming, pushNotifications=False, stateTransitionHistory=False, extendedAgentCard=False),
         skills=[skill],
         preferred_transport=args.preferred_transport,
         protocolVersion=args.protocol_version,
@@ -188,7 +194,7 @@ def main() -> None:
 
     # -- Request handler & server ---------------------------------------------
     request_handler = DefaultRequestHandler(
-        agent_executor=HelloWorldAgentExecutor(),
+        agent_executor=HelloWorldAgentExecutor(streaming=args.streaming),
         task_store=InMemoryTaskStore(),
     )
 

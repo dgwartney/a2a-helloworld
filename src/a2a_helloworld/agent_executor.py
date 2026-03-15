@@ -7,8 +7,11 @@ This module contains two classes:
   the ``DefaultRequestHandler`` delegates to when a message arrives.
 """
 
+import asyncio
+
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
+from a2a.types import TaskState, TaskStatus, TaskStatusUpdateEvent
 from a2a.utils import new_agent_text_message
 
 
@@ -37,9 +40,15 @@ class HelloWorldAgentExecutor(AgentExecutor):
     result as a text message event so it is returned to the caller.
     """
 
-    def __init__(self) -> None:
-        """Create the executor and its internal :class:`HelloWorldAgent`."""
+    def __init__(self, streaming: bool = False) -> None:
+        """Create the executor and its internal :class:`HelloWorldAgent`.
+
+        Args:
+            streaming: When True, emit a "working" status update before the
+                final message so streaming clients see incremental progress.
+        """
         self.agent = HelloWorldAgent()
+        self.streaming = streaming
 
     async def execute(
         self,
@@ -56,6 +65,17 @@ class HelloWorldAgentExecutor(AgentExecutor):
             context: Metadata about the current request (task id, message, etc.).
             event_queue: Queue used to emit response events back to the caller.
         """
+        if self.streaming:
+            await event_queue.enqueue_event(
+                TaskStatusUpdateEvent(
+                    taskId=context.task_id,
+                    contextId=context.context_id,
+                    status=TaskStatus(state=TaskState.working),
+                    final=False,
+                )
+            )
+            await asyncio.sleep(1)  # make streaming visually obvious
+
         result = await self.agent.invoke()
         await event_queue.enqueue_event(new_agent_text_message(result))
 

@@ -78,6 +78,12 @@ async def main() -> None:
         default=os.environ.get('A2A_LOG_FORMAT', DEFAULT_LOG_FORMAT),
         help="Python logging format string (env: A2A_LOG_FORMAT, default: %(default)s)",
     )
+    parser.add_argument(
+        "--streaming",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Use streaming mode (default: True, use --no-streaming to disable)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -132,6 +138,7 @@ async def main() -> None:
             )
 
         config = ClientConfig(
+            streaming=args.streaming,
             supported_transports=[transport_protocol],
             httpx_client=httpx_client,
         )
@@ -143,7 +150,7 @@ async def main() -> None:
         message = create_text_message_object(
             content=args.message)
 
-        logger.debug('Sending message...')
+        logger.debug(f'Sending message (streaming={args.streaming})...')
         async for event in client.send_message(message):
             if isinstance(event, Message):
                 # The agent responded with a direct Message (no task wrapper).
@@ -151,6 +158,8 @@ async def main() -> None:
             else:
                 # The response is a (Task, UpdateEvent | None) tuple.
                 task, update = event
+                if update is not None:
+                    logger.info(f'[streaming update] {update.model_dump(mode="json", exclude_none=True)}')
                 logger.info(task.model_dump(mode='json', exclude_none=True))
 
 
