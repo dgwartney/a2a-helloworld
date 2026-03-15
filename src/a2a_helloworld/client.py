@@ -54,6 +54,11 @@ async def main() -> None:
         action="store_true",
         help="Fetch and print the agent card, then exit",
     )
+    parser.add_argument(
+        "--message",
+        default=os.environ.get('A2A_MESSAGE', 'What is your quest?'),
+        help="Text message to send to the agent (env: A2A_MESSAGE, default: %(default)s)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
@@ -114,7 +119,7 @@ async def main() -> None:
 
         # -- Step 3: Send a message and print the response --------------------
         message = create_text_message_object(
-            content='how much is 10 USD in INR?')
+            content=args.message)
 
         logger.info('Sending message...')
         async for event in client.send_message(message):
