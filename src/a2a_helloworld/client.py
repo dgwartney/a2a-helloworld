@@ -66,7 +66,7 @@ async def main() -> None:
                 f'Attempting to fetch public agent card from: {base_url}{AGENT_CARD_WELL_KNOWN_PATH}')
             agent_card = await resolver.get_agent_card()
             logger.info('Successfully fetched public agent card:')
-            logger.info(agent_card.model_dump_json(indent=2, exclude_none=True))
+            logger.debug(agent_card.model_dump_json(indent=2, exclude_none=True))
             logger.info(
                 '\nUsing PUBLIC agent card for client initialization (default).')
 
@@ -115,7 +115,7 @@ async def main() -> None:
 
 
 def cli() -> None:
-    """CLI entry point registered as ``a2a-client`` in pyproject.toml."""
+    """CLI entry point registered as ``client`` in pyproject.toml."""
     import asyncio
 
     asyncio.run(main())

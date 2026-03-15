@@ -9,3 +9,6 @@ TRANSPORT_GRPC = TransportProtocol.grpc            # 'GRPC'
 TRANSPORT_JSONRPC = TransportProtocol.jsonrpc       # 'JSONRPC'
 
 SUPPORTED_TRANSPORTS = [TRANSPORT_HTTP_JSON, TRANSPORT_GRPC, TRANSPORT_JSONRPC]
+
+# Transports that can be served over HTTP on a single port.
+HTTP_TRANSPORTS = [TRANSPORT_HTTP_JSON, TRANSPORT_JSONRPC]

@@ -1,7 +1,8 @@
 """A2A agent server entry point.
 
-Builds an application that serves the Hello World agent over the selected
-transport binding (HTTP+JSON or JSON-RPC) and runs it with uvicorn.
+Builds an application that serves the Hello World agent over both HTTP-based
+transport bindings (HTTP+JSON and JSON-RPC) simultaneously on a single port
+and runs it with uvicorn.
 
 Configuration is resolved with CLI arguments taking precedence over
 environment variables, which take precedence over built-in defaults.
@@ -39,12 +40,21 @@ from a2a.server.tasks import InMemoryTaskStore
 from a2a.types import (
     AgentCapabilities,
     AgentCard,
+    AgentInterface,
     AgentSkill,
 )
+from starlette.routing import Mount
+
+AGENT_NAME = 'Hello World Agent'
+AGENT_DESCRIPTION = 'Just a hello world agent'
+AGENT_VERSION = '1.0.0'
+AGENT_INPUT_MODES = ['text']
+AGENT_OUTPUT_MODES = ['text']
+
 from a2a_helloworld.agent_executor import HelloWorldAgentExecutor
 from a2a_helloworld.protocol import (
+    HTTP_TRANSPORTS,
     KNOWN_A2A_PROTOCOL_VERSIONS,
-    SUPPORTED_TRANSPORTS,
     TRANSPORT_HTTP_JSON,
     TRANSPORT_JSONRPC,
 )
@@ -99,7 +109,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--preferred-transport",
-        choices=[t.value for t in SUPPORTED_TRANSPORTS],
+        choices=[t.value for t in HTTP_TRANSPORTS],
         default=os.environ.get('A2A_PREFERRED_TRANSPORT', TRANSPORT_HTTP_JSON.value),
         help="Preferred transport binding advertised in the agent card (env: A2A_PREFERRED_TRANSPORT, default: %(default)s)",
     )
@@ -118,17 +128,29 @@ def main() -> None:
     # The URL advertised in the card tells clients where to send requests.
     # It must *not* include the ``/v1`` prefix — the REST transport adds that
     # automatically to every endpoint path.
+    #
+    # Determine the non-preferred transport so both can be listed.
+    other_transport = (
+        TRANSPORT_JSONRPC.value
+        if args.preferred_transport == TRANSPORT_HTTP_JSON.value
+        else TRANSPORT_HTTP_JSON.value
+    )
+
     public_agent_card = AgentCard(
-        name='Hello World Agent',
-        description='Just a hello world agent',
+        name=AGENT_NAME,
+        description=AGENT_DESCRIPTION,
         url=args.agent_url,
-        version='1.0.0',
-        default_input_modes=['text'],
-        default_output_modes=['text'],
+        version=AGENT_VERSION,
+        default_input_modes=AGENT_INPUT_MODES,
+        default_output_modes=AGENT_OUTPUT_MODES,
         capabilities=AgentCapabilities(streaming=False, pushNotifications=False, stateTransitionHistory=False, extendedAgentCard=False),
         skills=[skill],
         preferred_transport=args.preferred_transport,
         protocolVersion=args.protocol_version,
+        additional_interfaces=[
+            AgentInterface(transport=args.preferred_transport, url=args.agent_url),
+            AgentInterface(transport=other_transport, url=args.agent_url),
+        ],
     )
 
     # -- Request handler & server ---------------------------------------------
@@ -137,23 +159,23 @@ def main() -> None:
         task_store=InMemoryTaskStore(),
     )
 
-    server_class_map = {
-        TRANSPORT_HTTP_JSON.value: A2ARESTFastAPIApplication,
-        TRANSPORT_JSONRPC.value: A2AStarletteApplication,
-    }
-    server_class = server_class_map.get(args.preferred_transport)
-    if server_class is None:
-        raise RuntimeError(
-            f"Unsupported preferred transport '{args.preferred_transport}'. "
-            f"Supported: {', '.join(server_class_map)}"
-        )
-
-    server = server_class(
+    # Build both transport apps and combine them into a single ASGI app.
+    # The JSON-RPC Starlette app serves as the outer app (owns the agent card
+    # at /.well-known/agent-card.json and POST /).  The REST FastAPI app is
+    # mounted inside it, with its own agent card route suppressed to avoid a
+    # duplicate.
+    jsonrpc_server = A2AStarletteApplication(
+        agent_card=public_agent_card,
+        http_handler=request_handler,
+    )
+    rest_server = A2ARESTFastAPIApplication(
         agent_card=public_agent_card,
         http_handler=request_handler,
     )
 
-    app = server.build()
+    app = jsonrpc_server.build()
+    rest_app = rest_server.build(agent_card_url='/--skip--/agent-card.json')
+    app.routes.append(Mount('', app=rest_app))
 
     # -- Startup configuration summary ----------------------------------------
     host = '0.0.0.0'
@@ -165,7 +187,8 @@ def main() -> None:
     print(f"  Version:           {public_agent_card.version}")
     print(f"  Protocol version:  {public_agent_card.protocol_version}")
     print(f"  URL:               {public_agent_card.url}")
-    print(f"  Transport:         {public_agent_card.preferred_transport}")
+    print(f"  Transport:         {public_agent_card.preferred_transport} (preferred)")
+    print(f"  Also serving:      {other_transport}")
     print(f"  Host:              {host}")
     print(f"  Port:              {port}")
     print(f"  Input modes:       {', '.join(public_agent_card.default_input_modes)}")
