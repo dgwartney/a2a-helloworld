@@ -1,7 +1,22 @@
+"""A2A test client that sends a message to the Hello World agent.
+
+Demonstrates the HTTP+JSON transport binding using the ``ClientFactory``
+from the ``a2a-sdk``.  The agent URL is read from the ``A2A_AGENT_URL``
+environment variable (defaults to ``http://localhost:9999``).
+
+Usage::
+
+    uv run a2a-client                          # local default
+    A2A_AGENT_URL=https://my.host uv run a2a-client  # custom URL
+"""
+
 import logging
 import os
 
+from dotenv import load_dotenv
 import httpx
+
+load_dotenv()
 
 from a2a.client import A2ACardResolver, ClientConfig, ClientFactory
 from a2a.client.helpers import create_text_message_object
@@ -17,28 +32,39 @@ from a2a.utils.constants import (
 
 
 async def main() -> None:
-    # Configure logging to show INFO level messages
+    """Run the test client.
+
+    The client performs the following steps:
+
+    1. **Resolve the agent card** — fetches the public agent card from the
+       well-known path (``/.well-known/agent-card.json``) so it knows the
+       agent's capabilities and preferred transport.
+    2. **Create an HTTP+JSON client** — uses ``ClientFactory`` configured with
+       ``TransportProtocol.http_json`` to build a client that matches the
+       server's advertised transport.
+    3. **Send a message** — sends a simple text message and iterates over the
+       response events, printing each one as JSON.
+    """
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
 
     base_url = os.environ.get('A2A_AGENT_URL', 'http://localhost:9999')
 
     async with httpx.AsyncClient() as httpx_client:
-        # Initialize A2ACardResolver
+        # -- Step 1: Resolve the agent card -----------------------------------
         resolver = A2ACardResolver(
             httpx_client=httpx_client,
             base_url=base_url,
         )
 
-        # Fetch Public Agent Card
-        agentCard: AgentCard | None = None
+        agent_card: AgentCard | None = None
 
         try:
             logger.info(
                 f'Attempting to fetch public agent card from: {base_url}{AGENT_CARD_WELL_KNOWN_PATH}')
-            agentCard = await resolver.get_agent_card()
+            agent_card = await resolver.get_agent_card()
             logger.info('Successfully fetched public agent card:')
-            logger.info(agentCard.model_dump_json(indent=2, exclude_none=True))
+            logger.info(agent_card.model_dump_json(indent=2, exclude_none=True))
             logger.info(
                 '\nUsing PUBLIC agent card for client initialization (default).')
 
@@ -50,29 +76,32 @@ async def main() -> None:
                 'Failed to fetch the public agent card. Cannot continue.'
             ) from e
 
-        # Create HTTP+JSON client via ClientFactory
+        # -- Step 2: Create HTTP+JSON client ----------------------------------
         config = ClientConfig(
             supported_transports=[TransportProtocol.http_json],
             httpx_client=httpx_client,
         )
         factory = ClientFactory(config)
-        client = factory.create(agentCard)
+        client = factory.create(agent_card)
         logger.info('HTTP+JSON client initialized.')
 
-        # Send a message
+        # -- Step 3: Send a message and print the response --------------------
         message = create_text_message_object(
             content='how much is 10 USD in INR?')
 
         logger.info('Sending message...')
         async for event in client.send_message(message):
             if isinstance(event, Message):
+                # The agent responded with a direct Message (no task wrapper).
                 print(event.model_dump(mode='json', exclude_none=True))
             else:
+                # The response is a (Task, UpdateEvent | None) tuple.
                 task, update = event
                 print(task.model_dump(mode='json', exclude_none=True))
 
 
-def cli():
+def cli() -> None:
+    """CLI entry point registered as ``a2a-client`` in pyproject.toml."""
     import asyncio
 
     asyncio.run(main())
