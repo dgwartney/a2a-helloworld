@@ -49,7 +49,7 @@ from a2a_helloworld.log import DEFAULT_LOG_FORMAT
 
 AGENT_NAME = 'Hello World Agent'
 AGENT_DESCRIPTION = 'Just a hello world agent'
-AGENT_VERSION = '1.0.0'
+AGENT_VERSION = '0.2.0'
 AGENT_INPUT_MODES = ['text']
 AGENT_OUTPUT_MODES = ['text']
 
