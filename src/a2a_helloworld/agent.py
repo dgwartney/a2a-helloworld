@@ -1,3 +1,5 @@
+import os
+
 import uvicorn
 
 from a2a.server.apps.rest.fastapi_app import A2ARESTFastAPIApplication
@@ -35,7 +37,7 @@ def main():
     public_agent_card = AgentCard(
         name='Hello World Agent',
         description='Just a hello world agent',
-        url='https://lumen-adapter.ngrok.io/v1',
+        url=os.environ.get('A2A_AGENT_URL', 'http://localhost:9999'),
         version='1.0.0',
         default_input_modes=['text'],
         default_output_modes=['text'],

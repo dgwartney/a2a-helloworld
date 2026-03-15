@@ -1,4 +1,5 @@
 import logging
+import os
 
 import httpx
 
@@ -20,7 +21,7 @@ async def main() -> None:
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
 
-    base_url = 'http://localhost:9999'
+    base_url = os.environ.get('A2A_AGENT_URL', 'http://localhost:9999')
 
     async with httpx.AsyncClient() as httpx_client:
         # Initialize A2ACardResolver
