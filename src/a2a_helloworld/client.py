@@ -1,4 +1,4 @@
-"""A2A test client that sends a message to the Hello World agent.
+"""A2A client with interactive chat REPL and single-shot modes.
 
 Fetches the agent card and selects the transport binding (HTTP+JSON or
 JSON-RPC) based on the agent's ``preferred_transport`` field.
@@ -8,19 +8,26 @@ The agent URL is read from the ``A2A_AGENT_URL`` environment variable
 
 Usage::
 
-    uv run client                          # local default
+    uv run client                              # interactive REPL
+    uv run client --message "Hello"            # single-shot mode
+    uv run client --agent-card-only            # fetch agent card only
     A2A_AGENT_URL=https://my.host uv run client  # custom URL
 """
 
 import argparse
+import asyncio
 import logging
 import os
+import time
+from collections.abc import AsyncGenerator
+from typing import Union
 
 from dotenv import load_dotenv
 import httpx
 
 load_dotenv()
 
+from a2a_helloworld.formatter import ChatFormatter
 from a2a_helloworld.log import DEFAULT_LOG_FORMAT
 
 from a2a.client import A2ACardResolver, ClientConfig, ClientFactory
@@ -28,6 +35,9 @@ from a2a.client.helpers import create_text_message_object
 from a2a.types import (
     AgentCard,
     Message,
+    TaskArtifactUpdateEvent,
+    TaskState,
+    TaskStatusUpdateEvent,
     TransportProtocol,
 )
 from a2a.utils.constants import (
@@ -37,99 +47,72 @@ from a2a.utils.constants import (
 from a2a_helloworld.protocol import HTTP_TRANSPORTS, TRANSPORT_HTTP_JSON, TRANSPORT_JSONRPC
 
 
-async def main() -> None:
-    """Run the test client.
+# Sentinel to detect whether --message was explicitly passed
+_MESSAGE_SENTINEL = object()
 
-    The client performs the following steps:
 
-    1. **Resolve the agent card** — fetches the public agent card from the
-       well-known path (``/.well-known/agent-card.json``) so it knows the
-       agent's capabilities and preferred transport.
-    2. **Select the transport** — reads the agent card's ``preferred_transport``
-       field and creates a client with the matching ``TransportProtocol``.
-    3. **Send a message** — sends a simple text message and iterates over the
-       response events, printing each one as JSON.
-    """
-    parser = argparse.ArgumentParser(description="A2A Hello World client")
-    parser.add_argument(
-        "--agent-card-only",
-        action="store_true",
-        help="Fetch and print the agent card, then exit",
-    )
-    parser.add_argument(
-        "--message",
-        default=os.environ.get('A2A_MESSAGE', 'What is your quest?'),
-        help="Text message to send to the agent (env: A2A_MESSAGE, default: %(default)s)",
-    )
-    parser.add_argument(
-        "--transport",
-        choices=[t.value for t in HTTP_TRANSPORTS],
-        default=os.environ.get('A2A_TRANSPORT'),
-        help="Transport to use when talking to the agent; overrides the agent card's preferred_transport (env: A2A_TRANSPORT, default: agent card preferred_transport)",
-    )
-    parser.add_argument(
-        "--log-level",
-        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
-        default=os.environ.get('A2A_LOG_LEVEL', 'INFO'),
-        help="Python logging level (env: A2A_LOG_LEVEL, default: %(default)s)",
-    )
-    parser.add_argument(
-        "--log-format",
-        default=os.environ.get('A2A_LOG_FORMAT', DEFAULT_LOG_FORMAT),
-        help="Python logging format string (env: A2A_LOG_FORMAT, default: %(default)s)",
-    )
-    parser.add_argument(
-        "--streaming",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Use streaming mode (default: True, use --no-streaming to disable)",
-    )
-    args = parser.parse_args()
+class HelloWorldClient:
+    """Client for communicating with an A2A Hello World agent."""
 
-    logging.basicConfig(
-        level=getattr(logging, args.log_level),
-        format=args.log_format,
-    )
-    logger = logging.getLogger(__name__)
+    def __init__(
+        self,
+        base_url: str,
+        streaming: bool = True,
+        transport: str | None = None,
+    ) -> None:
+        self.base_url = base_url
+        self.streaming = streaming
+        self.transport_override = transport
+        self.logger = logging.getLogger(__name__)
+        self.agent_card: AgentCard | None = None
 
-    base_url = os.environ.get('A2A_AGENT_URL', 'http://localhost:9999')
+    async def get_agent_card(self) -> AgentCard:
+        """Fetch and cache the agent card."""
+        if self.agent_card is not None:
+            return self.agent_card
 
-    async with httpx.AsyncClient() as httpx_client:
-        # -- Step 1: Resolve the agent card -----------------------------------
-        resolver = A2ACardResolver(
-            httpx_client=httpx_client,
-            base_url=base_url,
-        )
-
-        agent_card: AgentCard | None = None
-
-        try:
-            logger.debug(
-                f'Attempting to fetch public agent card from: {base_url}{AGENT_CARD_WELL_KNOWN_PATH}')
-            agent_card = await resolver.get_agent_card()
-            logger.debug('Successfully fetched public agent card:')
-            logger.info(agent_card.model_dump_json(indent=2, exclude_none=True))
-            logger.debug(
-                '\nUsing PUBLIC agent card for client initialization (default).')
-
-        except Exception as e:
-            logger.error(
-                f'Critical error fetching public agent card: {e}', exc_info=True
+        async with httpx.AsyncClient() as httpx_client:
+            resolver = A2ACardResolver(
+                httpx_client=httpx_client,
+                base_url=self.base_url,
             )
-            raise RuntimeError(
-                'Failed to fetch the public agent card. Cannot continue.'
-            ) from e
+            try:
+                self.logger.debug(
+                    f'Attempting to fetch public agent card from: {self.base_url}{AGENT_CARD_WELL_KNOWN_PATH}')
+                self.agent_card = await resolver.get_agent_card()
+                self.logger.debug('Successfully fetched public agent card:')
+                self.logger.debug(self.agent_card.model_dump_json(indent=2, exclude_none=True))
+                self.logger.debug(
+                    '\nUsing PUBLIC agent card for client initialization (default).')
+            except Exception as e:
+                self.logger.error(
+                    f'Critical error fetching public agent card: {e}', exc_info=True
+                )
+                raise RuntimeError(
+                    'Failed to fetch the public agent card. Cannot continue.'
+                ) from e
 
-        if args.agent_card_only:
-            print(agent_card.model_dump_json(indent=2, exclude_none=True))
-            return
+        return self.agent_card
 
-        # -- Step 2: Select transport ------------------------------------------
+    async def send_message(self, text: str) -> AsyncGenerator:
+        """Send a text message, yielding response events.
+
+        Yields either ``Message`` objects (non-streaming) or
+        ``(Task, update)`` tuples (streaming) for the caller to display.
+
+        Args:
+            text: The text message to send to the agent.
+
+        Yields:
+            SDK event objects from the agent response.
+        """
+        agent_card = await self.get_agent_card()
+
         transport_map = {
             TRANSPORT_HTTP_JSON.value: TRANSPORT_HTTP_JSON,
             TRANSPORT_JSONRPC.value: TRANSPORT_JSONRPC,
         }
-        selected = args.transport or agent_card.preferred_transport
+        selected = self.transport_override or agent_card.preferred_transport
         transport_protocol = transport_map.get(selected)
         if transport_protocol is None:
             raise RuntimeError(
@@ -137,37 +120,213 @@ async def main() -> None:
                 f"Supported: {', '.join(transport_map)}"
             )
 
-        config = ClientConfig(
-            streaming=args.streaming,
-            supported_transports=[transport_protocol],
-            httpx_client=httpx_client,
+        async with httpx.AsyncClient() as httpx_client:
+            config = ClientConfig(
+                streaming=self.streaming,
+                supported_transports=[transport_protocol],
+                httpx_client=httpx_client,
+            )
+            factory = ClientFactory(config)
+            client = factory.create(agent_card)
+            self.logger.debug(f'{selected} client initialized.')
+
+            message = create_text_message_object(content=text)
+
+            self.logger.debug(f'Sending message (streaming={self.streaming})...')
+            async for event in client.send_message(message):
+                yield event
+
+
+class HelloWorldChat:
+    """Interactive chat interface for the A2A Hello World agent.
+
+    Supports two modes:
+    - **REPL mode** (default): interactive loop where you type messages
+      and see formatted agent responses.
+    - **Single-shot mode** (``--message``): send one message, display
+      the response, and exit.
+    """
+
+    COMMANDS = {
+        '/quit': 'Exit the chat',
+        '/exit': 'Exit the chat',
+        '/help': 'Show available commands',
+    }
+
+    def __init__(self) -> None:
+        self.parser = argparse.ArgumentParser(description='A2A Hello World chat client')
+        self.formatter = ChatFormatter()
+        self.client: HelloWorldClient | None = None
+        self._add_arguments()
+
+    def _add_arguments(self) -> None:
+        """Define all CLI arguments."""
+        self.parser.add_argument(
+            '--agent-card-only',
+            action='store_true',
+            help='Fetch and print the agent card, then exit',
         )
-        factory = ClientFactory(config)
-        client = factory.create(agent_card)
-        logger.debug(f'{selected} client initialized.')
+        self.parser.add_argument(
+            '--message',
+            default=_MESSAGE_SENTINEL,
+            help='Text message to send (single-shot mode). Omit for interactive REPL (env: A2A_MESSAGE)',
+        )
+        self.parser.add_argument(
+            '--transport',
+            choices=[t.value for t in HTTP_TRANSPORTS],
+            default=os.environ.get('A2A_TRANSPORT'),
+            help='Transport to use; overrides agent card preference (env: A2A_TRANSPORT)',
+        )
+        self.parser.add_argument(
+            '--log-level',
+            choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+            default=os.environ.get('A2A_LOG_LEVEL', 'INFO'),
+            help='Python logging level (env: A2A_LOG_LEVEL, default: %(default)s)',
+        )
+        self.parser.add_argument(
+            '--log-format',
+            default=os.environ.get('A2A_LOG_FORMAT', DEFAULT_LOG_FORMAT),
+            help='Python logging format string (env: A2A_LOG_FORMAT, default: %(default)s)',
+        )
+        self.parser.add_argument(
+            '--log-file',
+            default=os.environ.get('A2A_LOG_FILE'),
+            help='Path to log file; when set, logs go to this file instead of stderr (env: A2A_LOG_FILE)',
+        )
+        self.parser.add_argument(
+            '--streaming',
+            action=argparse.BooleanOptionalAction,
+            default=False,
+            help='Use streaming mode (default: False, use --streaming to enable)',
+        )
 
-        # -- Step 3: Send a message and print the response --------------------
-        message = create_text_message_object(
-            content=args.message)
+    def parse(self) -> argparse.Namespace:
+        """Parse command-line arguments."""
+        return self.parser.parse_args()
 
-        logger.debug(f'Sending message (streaming={args.streaming})...')
-        async for event in client.send_message(message):
+    def configure_logging(self, args: argparse.Namespace) -> None:
+        """Configure logging from parsed arguments.
+
+        When ``--log-file`` is provided, log output goes to the specified
+        file instead of stderr, keeping the terminal clean for the chat UI.
+        """
+        handlers: list[logging.Handler] = []
+        if args.log_file:
+            handlers.append(logging.FileHandler(args.log_file))
+        else:
+            handlers.append(logging.StreamHandler())
+        logging.basicConfig(
+            level=getattr(logging, args.log_level),
+            format=args.log_format,
+            handlers=handlers,
+        )
+
+    async def _display_response(self, text: str) -> None:
+        """Send a message and display the formatted response.
+
+        Handles both streaming and non-streaming response events from
+        the agent, formatting them via :attr:`formatter`.
+
+        Args:
+            text: The text message to send.
+        """
+        start_time = time.monotonic()
+        async for event in self.client.send_message(text):
             if isinstance(event, Message):
-                # The agent responded with a direct Message (no task wrapper).
-                logger.info(event.model_dump(mode='json', exclude_none=True))
+                self.formatter.agent_response(
+                    self.formatter.extract_text(event.parts)
+                )
             else:
-                # The response is a (Task, UpdateEvent | None) tuple.
                 task, update = event
-                if update is not None:
-                    logger.info(f'[streaming update] {update.model_dump(mode="json", exclude_none=True)}')
-                logger.info(task.model_dump(mode='json', exclude_none=True))
+                if isinstance(update, TaskStatusUpdateEvent):
+                    if update.status.state == TaskState.working:
+                        self.formatter.streaming_typing()
+                    elif update.status.state == TaskState.completed:
+                        elapsed = time.monotonic() - start_time
+                        self.formatter.streaming_done(elapsed)
+                elif isinstance(update, TaskArtifactUpdateEvent):
+                    response_text = self.formatter.extract_text(
+                        update.artifact.parts
+                    )
+                    self.formatter.streaming_response(response_text)
+
+    async def _run_single_shot(self, text: str) -> None:
+        """Send one message and display the response.
+
+        Args:
+            text: The text message to send.
+        """
+        self.formatter.user_message(text)
+        await self._display_response(text)
+
+    async def _run_repl(self) -> None:
+        """Run the interactive chat REPL."""
+        loop = asyncio.get_event_loop()
+
+        agent_card = await self.client.get_agent_card()
+        agent_name = agent_card.name or 'Agent'
+        self.formatter.banner(agent_name)
+
+        while True:
+            try:
+                user_input = await loop.run_in_executor(
+                    None, lambda: input(self.formatter.prompt())
+                )
+            except (EOFError, KeyboardInterrupt):
+                print()
+                self.formatter.goodbye()
+                break
+
+            text = user_input.strip()
+            if not text:
+                continue
+
+            if text.startswith('/'):
+                cmd = text.lower()
+                if cmd in ('/quit', '/exit'):
+                    self.formatter.goodbye()
+                    break
+                elif cmd == '/help':
+                    self.formatter.help(self.COMMANDS)
+                    continue
+                else:
+                    self.formatter.error(
+                        f'Unknown command: {text}. Type /help for commands.'
+                    )
+                    continue
+
+            try:
+                await self._display_response(text)
+            except Exception as e:
+                self.formatter.error(f'Error: {e}')
+
+    async def run(self) -> None:
+        """Parse arguments, configure logging, and execute the client."""
+        args = self.parse()
+        self.configure_logging(args)
+
+        base_url = os.environ.get('A2A_AGENT_URL', 'http://localhost:9999')
+
+        self.client = HelloWorldClient(
+            base_url=base_url,
+            streaming=args.streaming,
+            transport=args.transport,
+        )
+
+        if args.agent_card_only:
+            agent_card = await self.client.get_agent_card()
+            print(agent_card.model_dump_json(indent=2, exclude_none=True))
+            return
+
+        if args.message is not _MESSAGE_SENTINEL:
+            await self._run_single_shot(args.message)
+        else:
+            await self._run_repl()
 
 
 def cli() -> None:
     """CLI entry point registered as ``client`` in pyproject.toml."""
-    import asyncio
-
-    asyncio.run(main())
+    asyncio.run(HelloWorldChat().run())
 
 
 if __name__ == '__main__':

@@ -8,7 +8,9 @@ A minimal [Agent-to-Agent (A2A)](https://google.github.io/A2A/) protocol example
 ├── src/a2a_helloworld/
 │   ├── agent.py              # Server entry point (uvicorn)
 │   ├── agent_executor.py     # Agent logic (returns "Hello World")
-│   ├── client.py             # Test client (auto-selects transport)
+│   ├── client.py             # Interactive chat client (REPL + single-shot)
+│   ├── formatter.py          # ANSI terminal formatter for chat output
+│   ├── log.py                # Shared logging configuration
 │   └── protocol.py           # Shared protocol constants
 ├── Containerfile             # Container build (UBI8 + uv)
 ├── pyproject.toml            # Project metadata and dependencies
@@ -129,21 +131,82 @@ A2A Hello World Agent
 
 When started with `--preferred-transport JSONRPC`, the agent uses `A2AStarletteApplication` and exposes JSON-RPC methods over a single endpoint.
 
-### Run the test client
+### Run the client
 
 In a separate terminal:
 
 ```bash
+# Interactive REPL (default)
 uv run client
+
+# Single-shot mode
+uv run client --message "Hello"
+
+# Fetch agent card only
+uv run client --agent-card-only
+
+# Enable streaming (SSE)
+uv run client --streaming
+
+# Override transport
+uv run client --transport JSONRPC
+
+# Log to file (keeps terminal clean for chat UI)
+uv run client --log-file /tmp/a2a.log --log-level DEBUG
 ```
 
-The client automatically:
-1. Fetches the agent card from the well-known path (`/.well-known/agent-card.json`)
-2. Reads the `preferredTransport` field from the agent card
-3. Creates a client with the matching transport protocol
-4. Sends a message and prints the response
+The client automatically fetches the agent card from `/.well-known/agent-card.json`, reads the `preferredTransport` field, and creates a client with the matching transport protocol. It supports `HTTP+JSON` and `JSONRPC` transport values as defined by the A2A specification.
 
-The client supports `HTTP+JSON` and `JSONRPC` transport values as defined by the A2A specification.
+#### Client Modes
+
+**Interactive REPL** (default when `--message` is omitted):
+
+```
+A2A Chat — connected to Hello World Agent
+Type /help for commands, /quit to exit.
+
+You: Hello
+Agent: Hello World
+You: /quit
+Goodbye!
+```
+
+REPL commands: `/help`, `/quit`, `/exit`. Press Ctrl+C or Ctrl+D to exit.
+
+**Single-shot** (`--message`): sends one message, prints the formatted response, and exits.
+
+#### Streaming vs Non-Streaming
+
+By default the client uses non-streaming mode, calling the `message:send` endpoint. Pass `--streaming` to use the `message:stream` SSE endpoint instead:
+
+```
+You: Hello
+Agent: ● typing...
+Agent: Hello World
+       ✓ done (0.8s)
+```
+
+#### Client CLI Arguments
+
+| Argument | Env Variable | Default | Description |
+|----------|-------------|---------|-------------|
+| `--message` | | _(REPL)_ | Text to send (single-shot mode) |
+| `--streaming` / `--no-streaming` | | `False` | Use SSE streaming endpoint |
+| `--transport` | `A2A_TRANSPORT` | _(from agent card)_ | Override transport: `HTTP+JSON` or `JSONRPC` |
+| `--agent-card-only` | | `False` | Print agent card JSON and exit |
+| `--log-level` | `A2A_LOG_LEVEL` | `INFO` | Python logging level |
+| `--log-format` | `A2A_LOG_FORMAT` | _(timestamp + level)_ | Python logging format string |
+| `--log-file` | `A2A_LOG_FILE` | _(stderr)_ | Log to file instead of stderr |
+
+#### Client Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `A2A_AGENT_URL` | Base URL of the agent to connect to | `http://localhost:9999` |
+| `A2A_TRANSPORT` | Transport override | _(from agent card)_ |
+| `A2A_LOG_LEVEL` | Logging level | `INFO` |
+| `A2A_LOG_FORMAT` | Logging format string | `%(asctime)s %(levelname)s: %(message)s` |
+| `A2A_LOG_FILE` | Path to log file | _(stderr)_ |
 
 ## Container Build
 
@@ -162,7 +225,9 @@ podman run -p 9999:9999 helloworld-a2a-server
 
 3. **Server** (`agent.py`) -- Selects the server implementation based on the preferred transport: `A2ARESTFastAPIApplication` for HTTP+JSON or `A2AStarletteApplication` for JSON-RPC. Serves the application with uvicorn on port 9999.
 
-4. **Client** (`client.py`) -- Uses `A2ACardResolver` to fetch the agent card, reads the `preferredTransport` field, and creates a client via `ClientFactory` with the matching `TransportProtocol`. Messages are sent as `Message` objects and responses are consumed as an async iterator of events.
+4. **Formatter** (`formatter.py`) -- `ChatFormatter` class that renders chat-style output with ANSI escape codes. Handles user messages, agent responses, streaming typing indicators, error display, and the REPL welcome banner. Uses plain ANSI sequences with no external dependencies.
+
+5. **Client** (`client.py`) -- `HelloWorldClient` fetches the agent card and sends messages as an async generator of SDK events. `HelloWorldChat` provides the CLI interface with interactive REPL and single-shot modes, consuming events from the client and formatting output via `ChatFormatter`.
 
 ## License
 
