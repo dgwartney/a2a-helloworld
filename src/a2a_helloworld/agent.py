@@ -14,7 +14,6 @@ from a2a_helloworld.agent_executor import HelloWorldAgentExecutor
 
 
 def main():
-    # --8<-- [start:AgentSkill]
     skill = AgentSkill(
         id='hello_world',
         name='Returns hello world',
@@ -22,7 +21,6 @@ def main():
         tags=['hello world'],
         examples=['hi', 'hello world'],
     )
-    # --8<-- [end:AgentSkill]
 
     extended_skill = AgentSkill(
         id='super_hello_world',
@@ -32,8 +30,6 @@ def main():
         examples=['super hi', 'give me a super hello'],
     )
 
-    # --8<-- [start:AgentCard]
-    # This will be the public-facing agent card
     public_agent_card = AgentCard(
         name='Hello World Agent',
         description='Just a hello world agent',
@@ -46,24 +42,7 @@ def main():
         supports_authenticated_extended_card=False,
         preferred_transport='HTTP+JSON',
     )
-    # --8<-- [end:AgentCard]
 
-    # This will be the authenticated extended agent card
-    # It includes the additional 'extended_skill'
-#    specific_extended_agent_card = public_agent_card.model_copy(
-#        update={
-#            'name': 'Hello World Agent - Extended Edition',  # Different name for clarity
-#            'description': 'The full-featured hello world agent for authenticated users.',
-#            'version': '1.0.1',  # Could even be a different version
-#            # Capabilities and other fields like url, default_input_modes, default_output_modes,
-#            # supports_authenticated_extended_card are inherited from public_agent_card unless specified here.
-#            'skills': [
-#                skill,
-#                extended_skill,
-#            ],  # Both skills for the extended card
-#        }
-#    )
-#
     request_handler = DefaultRequestHandler(
         agent_executor=HelloWorldAgentExecutor(),
         task_store=InMemoryTaskStore(),
@@ -77,7 +56,8 @@ def main():
     app = server.build()
 
     for route in app.routes:
-        print(f"  {getattr(route, 'methods', 'N/A')} {getattr(route, 'path', 'N/A')}")
+        print(
+            f"  {getattr(route, 'methods', 'N/A')} {getattr(route, 'path', 'N/A')}")
 
     uvicorn.run(app, host='0.0.0.0', port=9999, log_level="debug")
 
