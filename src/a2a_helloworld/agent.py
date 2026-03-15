@@ -15,9 +15,9 @@ Environment variables::
 Usage::
 
     uv run a2a-agent                                          # local default
-    uv run a2a-agent --a2a-protocol-version 0.3               # specific version
-    uv run a2a-agent --a2a-agent-url https://my.host          # custom URL
-    uv run a2a-agent --a2a-preferred-transport gRPC             # custom transport
+    uv run a2a-agent --protocol-version 0.3                    # specific version
+    uv run a2a-agent --agent-url https://my.host               # custom URL
+    uv run a2a-agent --preferred-transport gRPC                # custom transport
     A2A_AGENT_URL=https://my.host uv run a2a-agent            # URL via env var
     A2A_PROTOCOL_VERSION=0.3 uv run a2a-agent                 # version via env var
     A2A_PREFERRED_TRANSPORT=gRPC uv run a2a-agent              # transport via env var
@@ -82,18 +82,18 @@ def main() -> None:
         description="A2A Hello World agent server",
     )
     parser.add_argument(
-        "--a2a-agent-url",
+        "--agent-url",
         default=os.environ.get('A2A_AGENT_URL', 'http://localhost:9999'),
         help="URL advertised in the agent card (env: A2A_AGENT_URL, default: %(default)s)",
     )
     parser.add_argument(
-        "--a2a-protocol-version",
+        "--protocol-version",
         type=_validate_protocol_version,
         default=os.environ.get('A2A_PROTOCOL_VERSION', '1.0'),
         help="A2A protocol version advertised in the agent card in X.Y format (env: A2A_PROTOCOL_VERSION, default: %(default)s)",
     )
     parser.add_argument(
-        "--a2a-preferred-transport",
+        "--preferred-transport",
         choices=SUPPORTED_TRANSPORTS,
         default=os.environ.get('A2A_PREFERRED_TRANSPORT', 'HTTP+JSON'),
         help="Preferred transport binding advertised in the agent card (env: A2A_PREFERRED_TRANSPORT, default: %(default)s)",
@@ -116,14 +116,14 @@ def main() -> None:
     public_agent_card = AgentCard(
         name='Hello World Agent',
         description='Just a hello world agent',
-        url=args.a2a_agent_url,
+        url=args.agent_url,
         version='1.0.0',
         default_input_modes=['text'],
         default_output_modes=['text'],
         capabilities=AgentCapabilities(streaming=False, pushNotifications=False, stateTransitionHistory=False, extendedAgentCard=False),
         skills=[skill],
-        preferred_transport=args.a2a_preferred_transport,
-        protocolVersion=args.a2a_protocol_version,
+        preferred_transport=args.preferred_transport,
+        protocolVersion=args.protocol_version,
     )
 
     # -- Request handler & server ---------------------------------------------
