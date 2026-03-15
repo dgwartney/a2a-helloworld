@@ -14,13 +14,13 @@ Environment variables::
 
 Usage::
 
-    uv run a2a-agent                                          # local default
-    uv run a2a-agent --protocol-version 0.3                    # specific version
-    uv run a2a-agent --agent-url https://my.host               # custom URL
-    uv run a2a-agent --preferred-transport JSONRPC              # custom transport
-    A2A_AGENT_URL=https://my.host uv run a2a-agent            # URL via env var
-    A2A_PROTOCOL_VERSION=0.3 uv run a2a-agent                 # version via env var
-    A2A_PREFERRED_TRANSPORT=JSONRPC uv run a2a-agent            # transport via env var
+    uv run agent                                          # local default
+    uv run agent --protocol-version 0.3                    # specific version
+    uv run agent --agent-url https://my.host               # custom URL
+    uv run agent --preferred-transport JSONRPC              # custom transport
+    A2A_AGENT_URL=https://my.host uv run agent            # URL via env var
+    A2A_PROTOCOL_VERSION=0.3 uv run agent                 # version via env var
+    A2A_PREFERRED_TRANSPORT=JSONRPC uv run agent            # transport via env var
 """
 
 import argparse

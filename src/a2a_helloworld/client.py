@@ -8,8 +8,8 @@ The agent URL is read from the ``A2A_AGENT_URL`` environment variable
 
 Usage::
 
-    uv run a2a-client                          # local default
-    A2A_AGENT_URL=https://my.host uv run a2a-client  # custom URL
+    uv run client                          # local default
+    A2A_AGENT_URL=https://my.host uv run client  # custom URL
 """
 
 import logging
