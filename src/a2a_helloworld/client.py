@@ -31,7 +31,7 @@ from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,
     EXTENDED_AGENT_CARD_PATH,
 )
-from a2a_helloworld.protocol import TRANSPORT_GRPC, TRANSPORT_HTTP_JSON, TRANSPORT_JSONRPC
+from a2a_helloworld.protocol import TRANSPORT_HTTP_JSON, TRANSPORT_JSONRPC
 
 
 async def main() -> None:
@@ -82,9 +82,6 @@ async def main() -> None:
         transport_map = {
             TRANSPORT_HTTP_JSON.value: TRANSPORT_HTTP_JSON,
             TRANSPORT_JSONRPC.value: TRANSPORT_JSONRPC,
-            # Accept legacy aliases used by older agents
-            'JSON-RPC': TRANSPORT_JSONRPC,
-            'gRPC': TRANSPORT_GRPC,
         }
         preferred = agent_card.preferred_transport
         transport_protocol = transport_map.get(preferred)

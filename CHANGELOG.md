@@ -19,7 +19,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Startup configuration summary printed to stdout when the agent starts
 - Shared `protocol.py` module with constants for known protocol versions and supported transports
 - Client auto-selects transport based on the agent card's `preferredTransport` field
-- Client supports legacy transport aliases (`JSON-RPC`, `gRPC`) for backward compatibility
 - Agent card served at `/.well-known/agent-card.json`
 - CLI entry points: `agent` and `client`
 - Containerfile for building with Podman/Docker

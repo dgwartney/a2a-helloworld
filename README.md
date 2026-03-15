@@ -143,7 +143,7 @@ The client automatically:
 3. Creates a client with the matching transport protocol
 4. Sends a message and prints the response
 
-The client supports both `HTTP+JSON` and `JSONRPC` transport values, as well as legacy aliases (`JSON-RPC`, `gRPC`) for compatibility with older agents.
+The client supports `HTTP+JSON` and `JSONRPC` transport values as defined by the A2A specification.
 
 ## Container Build
 
