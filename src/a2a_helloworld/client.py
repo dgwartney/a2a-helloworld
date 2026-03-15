@@ -1,8 +1,10 @@
 """A2A test client that sends a message to the Hello World agent.
 
-Demonstrates the HTTP+JSON transport binding using the ``ClientFactory``
-from the ``a2a-sdk``.  The agent URL is read from the ``A2A_AGENT_URL``
-environment variable (defaults to ``http://localhost:9999``).
+Fetches the agent card and selects the transport binding (HTTP+JSON or
+JSON-RPC) based on the agent's ``preferred_transport`` field.
+
+The agent URL is read from the ``A2A_AGENT_URL`` environment variable
+(defaults to ``http://localhost:9999``).
 
 Usage::
 
@@ -29,6 +31,7 @@ from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,
     EXTENDED_AGENT_CARD_PATH,
 )
+from a2a_helloworld.protocol import TRANSPORT_GRPC, TRANSPORT_HTTP_JSON, TRANSPORT_JSONRPC
 
 
 async def main() -> None:
@@ -39,9 +42,8 @@ async def main() -> None:
     1. **Resolve the agent card** — fetches the public agent card from the
        well-known path (``/.well-known/agent-card.json``) so it knows the
        agent's capabilities and preferred transport.
-    2. **Create an HTTP+JSON client** — uses ``ClientFactory`` configured with
-       ``TransportProtocol.http_json`` to build a client that matches the
-       server's advertised transport.
+    2. **Select the transport** — reads the agent card's ``preferred_transport``
+       field and creates a client with the matching ``TransportProtocol``.
     3. **Send a message** — sends a simple text message and iterates over the
        response events, printing each one as JSON.
     """
@@ -76,14 +78,29 @@ async def main() -> None:
                 'Failed to fetch the public agent card. Cannot continue.'
             ) from e
 
-        # -- Step 2: Create HTTP+JSON client ----------------------------------
+        # -- Step 2: Select transport from agent card --------------------------
+        transport_map = {
+            TRANSPORT_HTTP_JSON.value: TRANSPORT_HTTP_JSON,
+            TRANSPORT_JSONRPC.value: TRANSPORT_JSONRPC,
+            # Accept legacy aliases used by older agents
+            'JSON-RPC': TRANSPORT_JSONRPC,
+            'gRPC': TRANSPORT_GRPC,
+        }
+        preferred = agent_card.preferred_transport
+        transport_protocol = transport_map.get(preferred)
+        if transport_protocol is None:
+            raise RuntimeError(
+                f"Unsupported preferred_transport '{preferred}' in agent card. "
+                f"Supported: {', '.join(transport_map)}"
+            )
+
         config = ClientConfig(
-            supported_transports=[TransportProtocol.http_json],
+            supported_transports=[transport_protocol],
             httpx_client=httpx_client,
         )
         factory = ClientFactory(config)
         client = factory.create(agent_card)
-        logger.info('HTTP+JSON client initialized.')
+        logger.info(f'{preferred} client initialized.')
 
         # -- Step 3: Send a message and print the response --------------------
         message = create_text_message_object(

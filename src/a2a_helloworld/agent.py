@@ -1,7 +1,7 @@
 """A2A agent server entry point.
 
-Builds a FastAPI application that serves the Hello World agent over the
-HTTP+JSON transport binding and runs it with uvicorn.
+Builds an application that serves the Hello World agent over the selected
+transport binding (HTTP+JSON or JSON-RPC) and runs it with uvicorn.
 
 Configuration is resolved with CLI arguments taking precedence over
 environment variables, which take precedence over built-in defaults.
@@ -17,10 +17,10 @@ Usage::
     uv run a2a-agent                                          # local default
     uv run a2a-agent --protocol-version 0.3                    # specific version
     uv run a2a-agent --agent-url https://my.host               # custom URL
-    uv run a2a-agent --preferred-transport gRPC                # custom transport
+    uv run a2a-agent --preferred-transport JSONRPC              # custom transport
     A2A_AGENT_URL=https://my.host uv run a2a-agent            # URL via env var
     A2A_PROTOCOL_VERSION=0.3 uv run a2a-agent                 # version via env var
-    A2A_PREFERRED_TRANSPORT=gRPC uv run a2a-agent              # transport via env var
+    A2A_PREFERRED_TRANSPORT=JSONRPC uv run a2a-agent            # transport via env var
 """
 
 import argparse
@@ -32,6 +32,7 @@ import uvicorn
 
 load_dotenv()
 
+from a2a.server.apps.jsonrpc.starlette_app import A2AStarletteApplication
 from a2a.server.apps.rest.fastapi_app import A2ARESTFastAPIApplication
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
@@ -41,9 +42,12 @@ from a2a.types import (
     AgentSkill,
 )
 from a2a_helloworld.agent_executor import HelloWorldAgentExecutor
-
-KNOWN_A2A_PROTOCOL_VERSIONS = {'0.1', '0.2', '0.3', '1.0'}
-SUPPORTED_TRANSPORTS = ['HTTP+JSON', 'gRPC', 'JSON-RPC']
+from a2a_helloworld.protocol import (
+    KNOWN_A2A_PROTOCOL_VERSIONS,
+    SUPPORTED_TRANSPORTS,
+    TRANSPORT_HTTP_JSON,
+    TRANSPORT_JSONRPC,
+)
 
 
 def _validate_protocol_version(value: str) -> str:
@@ -74,7 +78,8 @@ def main() -> None:
         2. Create a ``DefaultRequestHandler`` backed by
            :class:`~a2a_helloworld.agent_executor.HelloWorldAgentExecutor`
            and an in-memory task store.
-        3. Build a FastAPI application via ``A2ARESTFastAPIApplication``.
+        3. Build the application via ``A2ARESTFastAPIApplication`` (HTTP+JSON)
+           or ``A2AStarletteApplication`` (JSON-RPC).
         4. Print registered routes for debugging, then start uvicorn on
            ``0.0.0.0:9999``.
     """
@@ -94,8 +99,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--preferred-transport",
-        choices=SUPPORTED_TRANSPORTS,
-        default=os.environ.get('A2A_PREFERRED_TRANSPORT', 'HTTP+JSON'),
+        choices=[t.value for t in SUPPORTED_TRANSPORTS],
+        default=os.environ.get('A2A_PREFERRED_TRANSPORT', TRANSPORT_HTTP_JSON.value),
         help="Preferred transport binding advertised in the agent card (env: A2A_PREFERRED_TRANSPORT, default: %(default)s)",
     )
     args = parser.parse_args()
@@ -132,7 +137,18 @@ def main() -> None:
         task_store=InMemoryTaskStore(),
     )
 
-    server = A2ARESTFastAPIApplication(
+    server_class_map = {
+        TRANSPORT_HTTP_JSON.value: A2ARESTFastAPIApplication,
+        TRANSPORT_JSONRPC.value: A2AStarletteApplication,
+    }
+    server_class = server_class_map.get(args.preferred_transport)
+    if server_class is None:
+        raise RuntimeError(
+            f"Unsupported preferred transport '{args.preferred_transport}'. "
+            f"Supported: {', '.join(server_class_map)}"
+        )
+
+    server = server_class(
         agent_card=public_agent_card,
         http_handler=request_handler,
     )
