@@ -1,6 +1,6 @@
 [project]
 name = "a2a-helloworld"
-version = "0.2.0"
+version = "0.3.0"
 description = "HelloWorld agent example that only returns Messages"
 readme = "README.md"
 license = "MIT"

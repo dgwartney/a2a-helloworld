@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-03-15
+
+### Added
+- Interactive chat REPL mode (default when `--message` is omitted)
+- REPL commands: `/help`, `/quit`, `/exit`
+- ANSI-formatted terminal output for user messages, agent responses, and errors
+- Streaming typing indicator (`● typing...`) and completion timing (`✓ done`)
+- `--streaming` / `--no-streaming` flag (defaults to non-streaming)
+- `--log-file` CLI argument and `A2A_LOG_FILE` environment variable to redirect logs to a file
+- `ChatFormatter` class in new `formatter.py` module for ANSI terminal rendering
+
+### Changed
+- Client defaults to non-streaming mode (`message:send` endpoint)
+- `HelloWorldClient.send_message()` refactored to async generator yielding raw SDK events
+- Renamed `HelloWorldCLI` to `HelloWorldChat` with REPL and single-shot mode support
+- `--message` uses a sentinel default to distinguish between omitted and explicitly passed
+
+## [0.2.0] - 2026-03-15
+
+### Added
+- `--agent-card-only` flag to fetch and print the agent card without sending a message
+- `--message` CLI argument for sending a text message to the agent
+- `--log-level`, `--log-format` CLI arguments and corresponding environment variables (`A2A_LOG_LEVEL`, `A2A_LOG_FORMAT`)
+- Shared `log.py` module with `DEFAULT_LOG_FORMAT` constant
+- Named logger instances per module
+
+### Changed
+- Refactored logging configuration into a shared module used by both agent and client
+
 ## [0.1.0] - 2026-03-15
 
 ### Added
